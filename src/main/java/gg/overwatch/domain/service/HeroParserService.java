@@ -2,11 +2,13 @@ package gg.overwatch.domain.service;
 
 import gg.overwatch.domain.entity.Ability;
 import gg.overwatch.domain.entity.Hero;
-import gg.overwatch.util.URLClient;
-import org.json.simple.JSONArray;
-import org.json.simple.JSONObject;
-import org.json.simple.parser.JSONParser;
+import gg.overwatch.domain.service.mapper.HeroAbilityMapper;
+import gg.overwatch.domain.service.mapper.HeroMapper;
+import gg.overwatch.domain.service.mapper.HeroMainMapper;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestTemplate;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -17,51 +19,54 @@ public class HeroParserService {
 
     private final String HERO_END_POINT = "https://overwatch-api.net/api/v1/hero/";
 
-    private List<Hero> mapToHeroEntity(JSONArray jsonHeros){
+    private RestTemplate restTemplate;
+
+    @Autowired
+    public HeroParserService(RestTemplate restTemplate){
+        this.restTemplate = restTemplate;
+    }
+
+    private List<Hero> mapToHeroEntity(List<HeroMapper> heroMappers){
         List<Hero> heros = new ArrayList<>();
 
-        jsonHeros.forEach(o -> {
-            JSONObject hero = (JSONObject) o;
-            heros.add(createHeroEntity(hero));
+        heroMappers.forEach(heroMapper -> {
+            heros.add(createHeroEntity(heroMapper));
         });
 
         return heros;
     }
 
-    private Hero createHeroEntity(JSONObject jsonHero){
-        JSONArray jsonHeroAbilities = getHeroAbilities(jsonHero.get("id"));
+    private Hero createHeroEntity(HeroMapper heroMapper){
+        List<HeroAbilityMapper> heroAbilities = getHeroAbilities(heroMapper.id);
         Hero hero = new Hero(
-                jsonHero.get("id"),
-                jsonHero.get("name"),
-                jsonHero.get("real_name"),
-                jsonHero.get("health"),
-                jsonHero.get("armour"),
-                jsonHero.get("shield")
+                heroMapper.id,
+                heroMapper.name,
+                heroMapper.realName,
+                heroMapper.health,
+                heroMapper.armour,
+                heroMapper.shield
         );
 
-        jsonHeroAbilities.forEach(o -> {
-            JSONObject ability = (JSONObject) o;
+        heroAbilities.forEach(heroAbility -> {
             hero.addAbility(
-                    new Ability(
-                            ability.get("id"),
-                            ability.get("name"),
-                            ability.get("description"),
-                            ability.get("is_ultimate"),
-                            ability.get("url"))
+                new Ability(
+                    heroAbility.id,
+                    heroAbility.name,
+                    heroAbility.description,
+                    heroAbility.isUltimate,
+                    heroAbility.url
+                )
             );
         });
 
         return hero;
     }
 
-    private JSONArray getHeroAbilities(Object heroId){
-        JSONArray heroAbilities = new JSONArray();
+    private List<HeroAbilityMapper> getHeroAbilities(Object heroId){
+        List<HeroAbilityMapper> heroAbilities = new ArrayList<>();
         try {
-            JSONParser jsonParser = new JSONParser();
-            JSONObject jsonObject =
-                    (JSONObject) jsonParser.parse(URLClient.getJsonString(HERO_END_POINT + heroId));
-
-            heroAbilities = (JSONArray) jsonObject.get("abilities");
+            ResponseEntity<HeroMapper> response = restTemplate.getForEntity(HERO_END_POINT + heroId, HeroMapper.class);
+            heroAbilities = response.getBody().heroAbilities;
         } catch (Exception e){
             e.printStackTrace();
         }
@@ -72,11 +77,8 @@ public class HeroParserService {
     public List<Hero> getHeros() {
         List<Hero> heros = new ArrayList<>();
         try {
-            JSONParser jsonParser = new JSONParser();
-            JSONObject jsonObject =
-                    (JSONObject) jsonParser.parse(URLClient.getJsonString(HERO_LIST_END_POINT));
-
-            heros = mapToHeroEntity( (JSONArray) jsonObject.get("data") );
+            ResponseEntity<HeroMainMapper> response = restTemplate.getForEntity(HERO_LIST_END_POINT, HeroMainMapper.class);
+            heros = mapToHeroEntity( response.getBody().heros );
         } catch (Exception e){
             e.printStackTrace();
         }
